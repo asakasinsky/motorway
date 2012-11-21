@@ -144,7 +144,7 @@ geolocate.events.register("locationfailed",this,function() {
     OpenLayers.Console.log('Location detection failed');
 });
 
-document.getElementById('maximize-map-display').onclick = function() {
+document.getElementById('logo').onclick = function() {
     gl_vector.removeAllFeatures();
     geolocate.deactivate();
    // document.getElementById('track').checked = false;
