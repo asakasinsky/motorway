@@ -636,7 +636,7 @@ h1 > div {
 	 #search-input {
 	 	font-size: 1.0em;
 position: absolute;
-z-index: 9999;
+z-index: 1001;
 margin-top: -70px;
 margin-left: -225px;
 	 }
