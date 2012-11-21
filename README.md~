@@ -1,2 +1,14 @@
 motorway
 ========
+<<<<<<< HEAD
+v0.3
+- map fixed
+- add more kml files
+- remove unused js
+- edit some css
+- edit index.php for some texts
+- add geolocation feature (click on resize map to toggle)
+=======
+
+a hub for motorway project
+>>>>>>> 80c785d4c9ce286f7592941398a5d0b1fc2e886a
