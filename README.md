@@ -1,0 +1,58 @@
+motorway
+========
+v0.3
+- map fixed
+- add more kml files
+- remove unused js
+- edit some css
+- edit index.php for some texts
+- add geolocation feature (click on the motorway logo on the top left)
+
+
+v0.4 
+- Pavement Damage Added
+- edit index.php for some layout
+- edit style.css
+- edit controller.js, view.js, script.js
+
+v0.5
+- Edit save photo button (in video.js)
+
+branch(2)
+v.0.6
+
+- Create getImageDirectory() function in script.js (for example, image of 070200M00 is in the same directory with 070101M00 and for the same with 070401M00 is in 070301M00, 090402M00->090401M00, 090600M00->090500M00)
+- Edit ignore_section.php, controller.js, index.php, script.js for new algorithm (search for the whole main way)
+- Edit ignore_section.php to inform the user the maximum km. range if users' input exceed the maximum km of that section
+- Add new data for pavement (csv file)
+- Edit gis.js at addPoints function (change all result mindis to g_all_result[mindis])
+- Some bug fixed in controller.js script.js
+
+- Add hdm4 data to DB and prepare HDM4 function.
+- HDM4 data table display (not functional).
+
+
+v0.7
+
+- Update/Add HDM4 data to database (include all type) [Main09 has problemed and wait for u-turn]
+- HDM4 function complete
+- Some bug fixed
+- Add name instead of 0101,0102 ~~ (based on HDM4 xls file)
+- Edit controller.js, view.js, model.js, script.js, gis.js, ignore_section.php, _hdm4_search.php, style.css, index.php
+
+v0.8
+
+- Geolocation tagging 
+- 12-12-14motorway.backup --> update minus subdistance and update pavement
+- Some bug fixed (pavement search)
+
+v0.9 (use 12-12-14 database)
+
+- add feature points of pavement on map
+- change some div and breadcrumb position
+- lots of css edited
+- some bugs fixed (mainly on data issues)
+- fix _geo.php for pavement
+- add colors to pdf on table of pavement 
+- HDM4 plot on hold and will be continued after annouced bugs fixed
+

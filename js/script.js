@@ -1,0 +1,1258 @@
+//GLOBAL VAR
+var plot;
+var startIndex;
+var endIndex;
+
+var g_data = {
+    kmstart: "",
+    kmend: ""
+};
+
+var selectedIndex = -1;
+var g_linedata = [];
+var g_all_result;
+var g_all_result_all_lane = [];
+var g_options;
+var g_search_info = {
+    expressway: "",
+    kmstart: "",
+    kmend: "",
+    infotype: "",
+    exptype: "",
+};
+var g_search_info_level2 = {
+    kmstart: "",
+    kmend: "",
+    kmfreq: 25,
+    currentlane: "",
+    currentsection: "",
+    currentcode: ""
+};
+var g_pavement = {};
+var g_hdm4_search = {
+    expressway: "",
+    year: "",
+    type: "",
+    prevyear: "",
+    section: "",
+    exptype: "",
+    code: "",
+    dropdownOrder: ""
+};
+var g_hdm4_data_result = [];
+var g_pavement_array = [];
+var _kmfreq = [25, 50, 100, 500, 1000];
+var _rangefix = 25;
+var g_imageset;
+var finish_getimage = false;
+var HDM4videoclick = false;
+var zoom = false;
+
+var g_current_var = {
+    index: 0,
+    kmstart: 0,
+    kmend: 0,
+    section: "",
+    rangekmstart: 0,
+    rangekmend: 0,
+    lat: 0,
+    longi: 0,
+    mpd: 0,
+    iri_avg: 0,
+    rut_lane: 0,
+    hdm4: ""
+};
+var g_video = {
+    first_image: "",
+    length: ""
+};
+var g_geolocation = {};
+var g_hdm4search_click = false;
+var reverse = false;
+
+var controller = new Controller();
+var view = new View();
+var model = new Model();
+var mdata;
+var sync = false;
+
+$(function (){
+
+    init();
+
+     $("#video-map-display").hide();
+
+     $("[type='submit']").click(function () {
+         $("#placeholder").hide();
+         $("#video-map-display").show();
+     });
+
+    // $("#option2").fadeOut();
+
+    function init() {
+        //Hide Result Interface
+        $('#main_content').hide();
+       // $('#lane_selection').hide();
+        $('#pager').hide();
+     //   $('#damagesearch').hide();
+        $('#hdm4result').hide();
+        $("#option_lane").hide();
+       // $(".mainLane").hide();
+       // $('#fix_range').hide();
+        $('#option2').hide();
+        $('select[name=mainsection09]').hide();
+        $('#pavement_select').hide();
+
+        //Clone Init
+        cloneToMap($("#toolbox select[name=expressway]"), '#maptoolbox #expnametype', true);
+        cloneToMap($("#toolbox select[name=exptype]"), '#maptoolbox #expnametype', false);
+        //cloneToMap($("#toolbox .mainsection"), '#maptoolbox #selectname', false);
+        //cloneToMap($("#lane_selection select[name=mainLane]"), '#maptoolbox #selectname', true, true);
+        //Initial
+        showTypeDropdown($('select[name=expressway]').val(), $("#exptype").val());
+        showExpType($('select[name=expressway]').val());
+        //$("#maptoolbox .mainLane").show();
+        $("#maptoolbox #damage").append('<select name="infotype" class="span3 infotype"><option value="texture">ค่าพื้นผิว - Texture</option><option selected value="roughness">ค่าความขรุขระ - IRI</option><option value="rutting">ค่าร่องล้อ - Rutting</option></select>');
+        $("#maptoolbox").hide();
+
+
+        $("a.video_lightbox").fancybox({
+            'transitionIn': 'none',
+            'transitionOut': 'none',
+            'width': 640,
+            'height': 480,
+            'autoScale': true,
+            //'type' : 'iframe'
+            onStart: function () {
+                $("#videodialog").css('display', 'block');
+                if ($('#videoplayer').data("loadStatus") == "loaded") $("#videopreloader").fadeOut();
+                $("#fancybox-outer").width(498);
+            },
+            onClosed: function () {
+                $("#videodialog").css('display', 'none');
+                $('#videoplayer').jsMovie('stop');
+
+                $("#videopreloader div.bar").css('width', '');
+                $("#videopreloader .percentage").html('');
+            },
+            afterLoad: function(){
+                $("#fancybox-outer").width(498);
+            }
+        });
+
+        $("a.fancyimage").click(function () {
+            $.fancybox({
+                //'autoDimensions': false, 
+                'autoscale': true,
+                'content': '<img src="' + this.href + '" width="730" height="353" />',
+                'scrolling': 'no'
+            });
+            return false;
+        });
+    }
+
+    $('.damagesearch_but').bind('click', function () {
+        controller.damageSearch();
+        $("#maptoolbox #mainLane").find('option').eq(0).prop('selected', 'selected');
+        return false;
+    });
+
+    $('#kmfreq').prev().bind('click', function() {
+        if (!$(this).hasClass('disabled')) {
+
+            var i = _kmfreq.indexOf(parseInt($('#kmfreq').html()));
+            if (i - 1 >= 0) {
+                $('#kmfreq').html(_kmfreq[i - 1]);
+                g_search_info_level2.kmfreq = parseInt($('#kmfreq').html());
+            }
+            if (i - 1 == _kmfreq.indexOf(_rangefix)) 
+                $('#kmfreq').prev().addClass('disabled');
+            $('#kmfreq').next().removeClass('disabled');
+            controller.calculatePlotData();
+            return false;
+        }
+    });
+
+    $('#kmfreq').next().bind('click', function() {
+        if (!$(this).hasClass('disabled')) {
+            var i = _kmfreq.indexOf(parseFloat($('#kmfreq').html()));
+            if (i + 1 < _kmfreq.length) {
+                $('#kmfreq').html(_kmfreq[i + 1]);
+                g_search_info_level2.kmfreq = parseInt($('#kmfreq').html());
+            }
+            if (i + 1 == _kmfreq.length - 1) 
+                $(this).addClass('disabled');
+            $('#kmfreq').prev().removeClass('disabled');
+            controller.calculatePlotData();
+            //alert('what');
+            return false;
+        }
+    });
+
+    $('#geolocation').bind('hover', function(){
+        $('#geolocation').qtip({
+        overwrite: true,
+        content: {
+            title: {
+                text: "เลือกความเสียหาย"
+            },
+            text: '<ul class="nav nav-pills nav-stacked"><li><a href="#">ค่าพื้นผิว - Texture</li><li><a href="#">ค่าความขรุขระ - IRI</li><li><a href="#">ค่าร่องล้อ - Rutting</li><li><a href="#">ค่า Pavement</li></ul>',
+            button: 'Close'
+        },
+        style: {
+            classes: 'ui-tooltip-' + 'bootstrap' + ' ui-tooltip-shadow myqtip geolocation_type'
+        },
+        position: {
+            adjust: {
+                x: 0,
+                y: -30
+            },
+            my: 'bottom center', // Position my top left...
+            at: 'bottom center' // at the bottom right of...
+        },
+        show: {
+            ready: true,
+        },
+        hide: {
+            event: 'unfocus',
+            target: $(this)
+        },
+        events: {
+            show: function () {
+                // $(document).one("click", function () {
+                //     $(".qtip").qtip('hide');
+                // });
+
+            }
+        }
+        });
+    });
+
+    $('.geolocation_type li').live('click',function(index) {
+        var index = $(this).index();
+        $("#toolbox input[name=infotype]").eq(index).click();
+    });
+
+     
+
+    //=================== Map Resizing ==========================
+    //MapResize
+    $(window).resize(function () {
+        mapResize();
+    });
+
+    function mapResize() {
+        if ($('#container_map').hasClass('maximize')) {
+            var windowWidth = $(window).width();
+            var windowHeight = $(window).height();
+            $('#container_map, #map').width(windowWidth - 40 + 'px');
+            $('#container_map, #map').height(windowHeight - 40 + 'px');
+            map.updateSize();
+        }
+    }
+
+    //Maximize map
+    $('#maximize-map-display').toggle(function () {
+        if ($('#container_map').hasClass('mapclose')) $('#toggle-map-display').addClass('fromClose').click();
+        $('#container_map, #maximize-map-display, #toggle-map-display, #video-map-display, #geolocation').addClass('maximize');
+        $('#container_map').parent().css('height', '368px');
+        $(this).children().removeClass('icon-resize-full').addClass('icon-resize-small')
+        $(this).attr('title', 'ย่อแผนที่');
+        mapResize();
+
+        //clone
+        $("#maptoolbox").show();
+        $("#search-input").hide();
+        $(".errorreport").hide();
+        $('#maptoolbox #mainLane option').prop('selected', '');
+        $('#maptoolbox #mainLane option').eq($('#lane_selection #mainLane option:selected').index()).prop('selected', 'selected');
+
+    }, function () {
+        $("#maptoolbox").hide();
+        $("#search-input").show();
+        $(".errorreport").show();
+        $('#container_map, #maximize-map-display, #toggle-map-display, #video-map-display, #geolocation').removeClass('maximize');
+        $('#container_map, #map').css('width', '');
+        $('#container_map, #map').css('height', '');
+        $(this).children().removeClass('icon-resize-small').addClass('icon-resize-full')
+        $('#container_map').parent().css('height', '');
+        $(this).attr('title', 'ขยายแผนที่');
+        map.updateSize();
+
+        if (g_all_result) {
+            qtip.removeAllFeatures();
+            addPoints(g_all_result);
+        }
+    });
+
+    $('#container_map, #toggle-map-display, #maximize-map-display, #video-map-display, #geolocation').hover(function () {
+        if ($('#toggle-map-display i').hasClass('icon-chevron-up')) $('#toggle-map-display').stop().animate({
+            opacity: 0.8
+        });
+        $('#maximize-map-display').stop().animate({
+            opacity: 0.8
+        });
+        $('#video-map-display').stop().animate({
+            opacity: 0.8
+        });
+        $('#geolocation').stop().animate({
+            opacity: 0.8
+        });
+    }, function () {
+        if ($('#toggle-map-display i').hasClass('icon-chevron-up')) $('#toggle-map-display').stop().animate({
+            opacity: 0
+        });
+        $('#maximize-map-display').stop().animate({
+            opacity: 0
+        });
+        $('#video-map-display').stop().animate({
+            opacity: 0
+        });
+        $('#geolocation').stop().animate({
+            opacity: 0
+        });
+    });
+
+    $("div.geolocation_type").live({
+        mouseenter:
+           function()
+           {
+             if ($('#toggle-map-display i').hasClass('icon-chevron-up')) $('#toggle-map-display').stop().animate({
+            opacity: 0.8
+        });
+        $('#maximize-map-display').stop().animate({
+            opacity: 0.8
+        });
+        $('#video-map-display').stop().animate({
+            opacity: 0.8
+        });
+        $('#geolocation').stop().animate({
+            opacity: 0.8
+        });
+           },
+        mouseleave:
+           function()
+           {
+if ($('#toggle-map-display i').hasClass('icon-chevron-up')) $('#toggle-map-display').stop().animate({
+            opacity: 0
+        });
+        $('#maximize-map-display').stop().animate({
+            opacity: 0
+        });
+        $('#video-map-display').stop().animate({
+            opacity: 0
+        });
+        $('#geolocation').stop().animate({
+            opacity: 0
+        });
+           }
+       }
+    );
+
+    //Minimize map
+    $('#toggle-map-display').toggle(function () {
+        if ($('#container_map').hasClass('maximize')) $('#maximize-map-display').click();
+        $('#container_map').addClass('mapclose');
+        $('#container_map').stop().animate({
+            height: 5,
+            'margin-bottom': 35,
+            'padding-bottom': 0
+        }, 'fast');
+        $('#map').stop().animate({
+            top: -325
+        }, 'fast');
+        $('#toggle-map-display, #maximize-map-display, #video-map-display, #geolocation').css('bottom', '15px');
+        $(this).attr('title', 'เปิดแผนที่');
+        $(this).children().removeClass('icon-chevron-up').addClass('icon-chevron-down')
+    }, function () {
+        $('#container_map').removeClass('mapclose');
+        if ($(this).hasClass('fromClose')) {
+            $('#container_map').css('height', '').css('margin-bottom', '').css('padding-bottom', '');
+            $('#map').css('top', '');
+            $(this).removeClass('fromClose');
+        } else {
+            $('#container_map').stop().animate({
+                height: 330,
+                'margin-bottom': 20,
+                'padding-bottom': 8
+            }, 'fast');
+            $('#map').animate({
+                top: 8
+            }, 'fast');
+        }
+        $(this).children().removeClass('icon-chevron-down').addClass('icon-chevron-up');
+        $(this).attr('title', 'เก็บแผนที่');
+        $('#toggle-map-display, #maximize-map-display, #video-map-display, #geolocation').css('bottom', '');
+    });
+
+
+    //================== Toolbox Maptoolbox Sync ========================
+
+    //Sync Select input
+    function HTMLselectTagBinding(selector, selectedOne, except) {
+        selector = $(selector);
+        if (except) selector = $(selector).not(except);
+        var index = selectedOne.find('option:selected').prop('selected', 'selected').index();
+        selector.each(function () {
+            $(this).find('option').eq(index).prop('selected', 'selected');
+        });
+    }
+
+    function skipSearch1Setting(selector) {
+        //  g_search_info['expressway'] = $('select[name=expressway]').val();
+        g_search_info['exptype'] = $('select[name=exptype]').val();
+        //  g_search_info['infotype'] 
+        g_search_info_level2['currentsection'] = selector.val();
+        g_search_info_level2['currentcode'] = selector.find('option:selected').html();
+    }
+
+        //To show TYPE[main, access, enex] **S1 does not have enex
+    function showExpType(exp) {
+        $('select[name=exptype] option').show();
+
+        if (exp == "03") {
+            $('select[name=exptype] option[value=2]').hide();
+            $('select[name=exptype] option[value=1]').prop('selected', 'selected');
+            $('#option1').show();
+        }
+    }
+
+    //Show Dropdown of each type
+    function showTypeDropdown(exp, exptype) {
+        $('.enexname').not('#lane_selection .enexname').hide();
+        $('.accessname').not('#lane_selection .accessname').hide();
+        $('.mainsection').not('#lane_selection .mainsection').hide();
+        $('.intersect').not('#lane_selection .intersect').hide();
+        $('#maptoolbox #mainLane').hide();
+        $('#maptoolbox .mainsection').hide();
+      //  $('#maptoolbox .mainsection').remove();
+        $('#maptoolbox #selectname').html('');
+        if (exptype == "2") {
+
+            var elem = "enexname" + exp;
+            $('select[name=' + elem+']').not('#lane_selection .enexname').show().find('option:first').prop('selected', 'selected');
+            $('#maptoolbox .enexname').remove();
+            cloneToMap($('select[name=' + elem+']'), '#maptoolbox #selectname');
+            //Hide Limited_Half and Limited_Full of HDM4
+            $('select#hdm4type option').not(':first').hide();
+
+        } else if (exptype == "3") {
+            var elem = "accessname" + exp;
+            $('#maptoolbox .accessname').remove();
+            $('select[name=' + elem+']').not('#lane_selection .accessname').show().find('option:first').prop('selected', 'selected');
+            //$('.accessname').clone().removeClass('input-spanall').addClass('span3').appendTo('#maptoolbox #selectname').find('option').eq(index).prop('selected','selected');
+            cloneToMap($('select[name=' + elem+']'), '#maptoolbox #selectname',true);
+            $('#maptoolbox #mainLane').prop('multiple','multiple');
+            //Hide Limited_Half and Limited_Full of HDM4
+            $('select#hdm4type option').not(':first').hide();
+        } else if(exptype == "4") {
+            var elem = "intersect" + exp;
+            $('#maptoolbox .intersect').remove();
+            $('select[name=' + elem+']').not('#lane_selection .intersect').show().find('option:first').prop('selected', 'selected');
+            //$('.accessname').clone().removeClass('input-spanall').addClass('span3').appendTo('#maptoolbox #selectname').find('option').eq(index).prop('selected','selected');
+            cloneToMap($('select[name=' + elem+']'), '#maptoolbox #selectname');
+            //Hide Limited_Half and Limited_Full of HDM4
+            $('select#hdm4type option').not(':first').hide();
+        } else {
+            $('#maptoolbox #mainLane').show();
+            var elem = "mainsection" + exp;
+            $('#maptoolbox .mainsection').remove();
+            $('select[name=' + elem+']').not('#lane_selection .accessname').show().find('option:first').prop('selected', 'selected');
+            //$('#maptoolbox select[name=mainsection]').show();
+
+            cloneToMap($('#notpavement select[name=' + elem+']'), '#maptoolbox #selectname',true);
+            $('#maptoolbox #mainLane').prop('multiple','multiple');
+            $('#maptoolbox #mainLane').find('option:first').prop('selected','selected');
+          //  mainLane(exp);
+            //Hide Limited_Half and Limited_Full of HDM4
+            $('select#hdm4type option').not(':first').show();
+        }
+
+    }
+
+    
+    //Sync mainsection
+     $('#maptoolbox .mainsection, #lane_selection .mainsection').live('change', function () {
+        HTMLselectTagBinding('select.mainsection', $(this), '#lane_selection select.mainsection');
+        $('#toolbox input[name=kmstart]').val(0);
+        $('#toolbox input[name=kmend]').val(2);
+        controller.damageSearch(); 
+    });
+
+     $('#toolbox .mainsection').live('change',function(){
+        $('#toolbox input[name=kmstart]').val('');
+        $('#toolbox input[name=kmend]').val('');
+     });
+
+    //When change expressway clear kmrange
+    $('select[name=expressway]').live('change', function () {
+        $('#toolbox input[name=kmstart], #toolbox input[name=kmend]').val('');
+        HTMLselectTagBinding('select[name=expressway]', $(this));
+        var expcode = $(this).val();
+        showExpType(expcode);
+        showTypeDropdown(expcode, $('select[name=exptype]').val());
+        $('#toolbox input[name=kmstart]').val('');
+        $('#toolbox input[name=kmend]').val('');
+    });
+
+    //autofill KM for #maptoolbox
+    $('#maptoolbox select[name=expressway]').live('change', function () {
+       // if($(this).val() == "")
+       // {
+       //     $("#fix_range").show();
+            $('#toolbox input[name=kmstart]').val(0);
+            $('#toolbox input[name=kmend]').val(2);
+       // }   
+        controller.damageSearch(); 
+    });
+
+    //Sync exenname
+    $('select.enexname').live('change', function () {
+        HTMLselectTagBinding('select.enexname', $(this), '#lane_selection .enexname');
+    });
+
+    //Sync accessname
+    $('select.accessname').live('change', function () {
+       // HTMLselectTagBinding('select[name=' + $(this).prop('id') + ']', $(this), '#lane_selection .accessname');
+       HTMLselectTagBinding('select.accessname', $(this), '#lane_selection select.accessname');
+    });
+
+    //Sync intersect
+    $('select.intersect').live('change', function () {
+        HTMLselectTagBinding('select.intersect', $(this), '#lane_selection .intersect');
+    });
+
+    $('#maptoolbox .accessname, #lane_selection .accessname').live('change', function () {
+        controller.damageSearch(); 
+        zoomCoor();
+    });
+
+    $('#maptoolbox .enexname, #lane_selection .enexname').live('change', function () {
+        controller.damageSearch(); 
+    });
+
+    $('#maptoolbox .intersect, #lane_selection .intersect').live('change', function () {
+        controller.damageSearch(); 
+    });
+
+    $('select[name=infotype], input[name=infotype]').live('change', function () {
+        var info = $(this).prop('value');
+        console.log(info);
+        $('input[name=infotype][value=' + info + ']').prop('checked', 'checked');
+        $('select[name=infotype] option[value=' + info + ']').prop('selected', 'selected');
+
+        //var paveoption7 = '<option value="0102">0102</option><option value="0101">0101</option><option value="0200">0200</option><option value="0301">0301</option><option value="0302">0302</option><option value="0401">0401</option>';
+        //var paveoption9 = '<option value="0401">0401</option><option value="0402">0402</option><option value="0500">0500</option><option value="0600">0600</option>';
+
+       //  var ex = $('#toolbox select.mainsection:visible option').prop('id');
+       // $('#option1 div').hide();
+        if(info=='pavement')
+        {
+            $('#option1 #notpavement').hide();
+            $('#option1 #pavement_select').show();
+            $('#option1 #fix_range').hide();
+        }
+        else
+        {
+           $('#option1 #notpavement').show();
+           $('#option1 #pavement_select').hide();
+           $('#option1 #fix_range').show();
+        }
+    });
+
+    $('#maptoolbox select[name=infotype]').live('change', function () {
+        //g_search_info.infotype = $('#maptoolbox select[name=infotype]:checked').val();
+        if ($("#main_content").is(":hidden") || $("#damagesearch").is(":hidden")) {
+            if($('#toolbox input[name=kmstart]').val() == '' ||$('#toolbox input[name=kmend]').val() == '')
+            {
+                $('#toolbox input[name=kmstart]').val('0');
+                $('#toolbox input[name=kmend]').val('2');
+            }
+            controller.damageSearch(); 
+        } else {
+            g_search_info['infotype'] = $(this).find('option:selected').val();
+           controller.activatedResult(g_all_result);
+        }
+    });
+
+    $('#lane_selection #mainLane').live('change', function () {
+        var index = $(this).find('option:selected').prop('selected', 'selected').index();
+        $('#maptoolbox #mainLane option').prop('selected', '');
+        $('select[name=mainLane]').each(function () {
+            $(this).find('option').eq(index).prop('selected', 'selected');
+        });
+
+        $("#fix_range").show();
+        g_search_info_level2['currentsection'] = g_search_info_level2['currentsection'].substr(0,9) + $(this).val();
+       // g_search_info_level2['currentcode'] = $(this).find('option[value="' + $(this).val() + '"]').prop('title');
+        g_search_info['exptype'] = $('select[name=exptype]').val();
+        if ($("#main_content").is(":hidden") || g_search_info['searchtype'] == 'overlap') 
+            controller.damageSearch(); 
+        else 
+            controller.activatedResult(g_all_result_all_lane[$(this).val()]);
+    });
+
+    $('#pavement_lane #mainLane').live('change', function(){
+        if(g_search_info_level2['currentsection'].indexOf('%') == -1)
+            g_search_info_level2['currentsection'] = g_search_info_level2['currentsection'].substr(0,9) + $(this).val();
+        else
+            g_search_info_level2['currentsection'] = g_search_info_level2['currentsection'].substr(0,g_search_info_level2['currentsection'].indexOf('%')+1) + $(this).val();
+        //g_search_info['exptype'] = $('select[name=exptype]').val();
+        controller.searchPavement();
+    });
+
+
+    $('select[name=exptype]').live('change', function () {
+        //$('#kmstart, #kmend').val('');
+        var index = $(this).find('option:selected').prop('selected', 'selected').index();
+        $('select[name=exptype]').each(function () {
+            $(this).find('option').eq(index).prop('selected', 'selected');
+        });
+
+        if ($(this).val() == "1") {
+            $("#option1").show();
+            $("#option2").hide();
+            $("#maptoolbox .mainLane").show();
+            showTypeDropdown($('select[name=expressway]').val(), $(this).val());
+            $('#toolbox input[name=kmstart]').val(0);
+            $('#toolbox input[name=kmend]').val(2);
+            //Hide Limited_Half and Limited_Full of HDM4
+            $('select#hdm4type option').not(':first').show();
+        } else {
+            $("#option2").show();
+            $("#option1").hide();
+
+            showTypeDropdown($('select[name=expressway]').val(), $(this).val());
+            $('#toolbox input[name=kmstart]').val('');
+            $('#toolbox input[name=kmend]').val('');
+            //Hide Limited_Half and Limited_Full of HDM4
+            $('select#hdm4type option:first').prop('selected', 'selected');
+            $('select#hdm4type option').not(':first').hide();
+
+        }
+        if($(this).val() == "3")
+            $("#maptoolbox .mainLane").show();
+    });
+
+    $('#maptoolbox select[name=exptype]').live('change', function () {
+        controller.damageSearch(); 
+    });
+
+    //Addpoint of lanes
+    $('#maptoolbox select#mainLane').live('change', function () {
+        qtip.removeAllFeatures();
+        var suffix = [];
+        $(this).find('option:selected').each(function () {
+            var s = $(this).val();
+            addPoints(g_all_result_all_lane[s]);
+        });
+    });
+
+    //Addpoint of lanes
+    $('#maptoolbox #geo select').live('change', function () {
+       // alert('what');
+        qtip.removeAllFeatures();
+        var suffix = [];
+        $(this).find('option:selected').each(function () {
+            var s = $(this).val();
+            addPoints(g_geolocation[s]);
+        });
+    });
+
+    //Plot Click
+    $("#line-chart").bind("plotclick", function (event, pos, item) {
+        plot.unhighlight();
+        var nearest = nearestIndex(pos.x);
+        updateVertical(nearest);
+        highlightTable(nearest);
+        updateCurrentVar(nearest);
+        map.setCenter(new OpenLayers.LonLat(g_current_var['longi'], g_current_var['lat']).transform(new OpenLayers.Projection("EPSG:4326"), map.getProjectionObject()));
+        //reelUpdate(nearest);
+
+        //Update Scroll Bar of Data Table No.1
+        var tablehl = $('.table_highlight');
+        var tableWrapper = $('#table1').parent();
+        tableWrapper.scrollTop(tableWrapper.scrollTop() + tablehl.position().top - tablehl.height() * 4 - tableWrapper.position().top);
+    });
+
+    //Export PDF and Excel
+    $("#hdm4excel").bind('click', function () {
+      //  var expressway;
+       // if (g_hdm4_search['exptype'] != 2) expressway = $('#yearbudget .expressway').html();
+      //  else expressway = $('select[name=expressway] option[value=' + g_search_info['expressway'] + ']').html() + ' / ' + $('#yearbudget .expressway').html();
+
+     //  var head = expressway + ";;" + $("#yearbudget .hdm4year").html() + ";;" + $("#yearbudget .hdm4type").html() + ";;" + $("#totalcost").html();
+        var columns = view.getHDM4Columns();
+        var head = toExpressName(g_search_info.expressway)+";;"+$('#hdm4result .section').html()+";;"+g_hdm4_search.year+";;"+$('#hdm4result .hdm4type').html()+";;"+$("#totalcost").html();
+        columns = columns.join(";;");
+        $("#hdm4result #genexcel input[name=head]").val(head);
+        $("#hdm4result #genexcel input[name=exceldata]").val(g_hdm4_data_result.join(";;"));
+        $("#hdm4result #genexcel").submit();
+        return false;
+    });
+
+    $('#pavementexcel').bind('click', function(){
+        var columns = view.getPavementColumns();
+        var head = toExpressName(g_search_info.expressway)+";;"+g_search_info_level2.currentsection+";;"+g_search_info_level2.currentcode;
+        columns = columns.join(";;");
+        var data = g_pavement_array.join(";;");
+        $("#pavement #genexcel input[name=head]").val(head);
+        $("#pavement #genexcel input[name=exceldata]").val(data);
+        $("#pavement #genexcel input[name=columns]").val(columns);
+        $("#pavement #genexcel").submit();
+        return false;
+    });
+
+    $("#exportPDF").bind('click', controller.exportPDF);
+    $("#hdm4pdf").bind('click', controller.exportPDFhdm4);
+    $("#pavementpdf").bind('click', controller.exportPDFPavement);
+
+    $("#toolbox input[name=kmstart], #toolbox input[name=kmend]").live('bind', function () {
+        $(this).css('border', '').css('background-color', '');
+    });
+
+    //Pavement
+    $('#pavement_table tbody tr').live('click',function(){
+        var index = $(this).parent().children().index($(this));
+        console.log(index);
+        //Highlight table when click
+        $('#pavement_table tbody tr.table_highlight').removeClass("table_highlight");
+        $('#pavement_table tbody tr').eq(index).addClass('table_highlight');
+        console.log(g_pavement[index]['lat']);
+        console.log(g_pavement[index]['long']);
+        //addPoints(g_pavement[index]);
+    });
+
+
+    //HDM4
+    $('#hdm4table tbody tr td').live('click', function () {
+        if ($(this).find('i').hasClass('icon-facetime-video')) {
+            $("a.video_lightbox").click();
+        }
+        if (!$(this).parent().hasClass('table_highlight')) {
+            var index = $(this).parent().parent().children().index($(this).parent());
+
+            //Highlight table when click
+            $('#hdm4table tbody tr.table_highlight').removeClass("table_highlight");
+            $('#hdm4table tbody tr').eq(index).addClass('table_highlight');
+
+            var tablerow = $(this).parent().find('td');
+            var allyear = 0;
+            if (g_hdm4_search['year'] == 'all') 
+                allyear = 1;
+
+            //Extract data from HDM4 table for video data
+            var hdm4kmstart = parseFloat(tablerow.eq(1 + allyear).html().replace('+', '.'));
+            var hdm4kmend = parseFloat(tablerow.eq(2 + allyear).html().replace('+', '.'));
+            var dir = tablerow.eq(3 + allyear).html();
+            var lane = tablerow.eq(4 + allyear).html();
+
+            var year = g_hdm4_search['year'];
+            var workdes = tablerow.eq(5 + allyear).html();
+            var cost = tablerow.eq(6 + allyear).html();
+
+            var hdm4current = {
+                year: year,
+                workdes: workdes,
+                cost: cost
+            };
+            g_current_var['hdm4'] = hdm4current;
+            $('#videoinfo #video_infotype').html(g_current_var['hdm4']['workdes']);
+            // if (g_hdm4_search['exptype'] != 4) {
+            //     //Extract
+            //     switch (dir) {
+            //         case "ขาเข้า":
+            //             dir = "R";
+            //             break;
+            //         case "ขาออก":
+            //             dir = "F";
+            //             break;
+            //     }
+            //     switch (lane) {
+            //         case "ซ้าย":
+            //             lane = "4";
+            //             break;
+            //         case "กลาง(2)":
+            //         case "กลาง(สอง)":
+            //             lane = "3";
+            //             break;
+            //         case "กลาง(1)":
+            //         case "กลาง(หนึ่ง)":
+            //             lane = "2";
+            //             break;
+            //         case "ขวา":
+            //             lane = "1";
+            //             break;
+            //     }
+            // var exp = g_hdm4_search['expressway'];
+            // var prefix = g_hdm4_search['section'].substr(0,9);
+            // //alert('arai wa');
+            // var section = prefix+dir+lane;
+            // //     //Add case for enex and access (abb_exp = section)
+            // //     var abb_exp = g_hdm4_search['expressway'];
+            // //     if (abb_exp == "0102" || abb_exp == "0101") {
+            // //         //find specialcase for that section
+            // //         var spcase = 8;
+            // //         if (spcase < hdm4kmstart) 
+            // //             var section = '0102' + "%" + dir + lane; 
+            // //         else 
+            // //             var section = '0101' + "%" + dir + lane;
+            // //     } 
+            // //     else 
+            // //         var section = abb_exp + "%" + dir + lane;
+            //  } 
+            //  else
+            //  {
+                var section = g_hdm4_result[index]['section'] ;
+             //}
+            // else {
+            //     var section;
+            //     if (g_hdm4_search['exptype'] == 3) {
+            //         section = $('#toolbox select#accessname option').eq(g_hdm4_search['dropdownOrder']).val();
+            //     } else {
+            //         section = $('#toolbox select.enexname:visible option').eq(g_hdm4_search['dropdownOrder']).val();
+            //     }
+            // }
+            //console.log(hdm4kmstart+"=="+hdm4kmend+"=="+section);
+            console.log(section);
+            controller.hdm4Click(hdm4kmstart, hdm4kmend, section)
+            //zoomCoor();
+        }
+    });
+
+    $('#search_hdm4_button').bind('click', controller.hdm4Search);
+
+    //HDM4 year dropdown
+    $('#hdm4yeardropdown a').live('click', function () {
+        var y = $(this).html();
+        if (y != 'ทุกปี') 
+            y = parseInt(y);
+        else 
+            y = 'all';
+        g_hdm4_search['year'] = y;
+        //$('input:radio[name=hdm4year][value='+y+']').prop('checked',true);
+        model.getHDM4Result(g_hdm4_search['expressway'],g_hdm4_search['type'],g_hdm4_search['year'],g_hdm4_search['exptype'],g_hdm4_search['section']);
+        return false;
+    });
+
+    //HDM4 section dropdown
+    $('#hdm4sectiondropdown a').live('click', function () {
+        var sect = $(this).prop('id');
+        g_hdm4_search['section'] = g_hdm4_search.expressway + sect;
+        //console.log(g_hdm4_search.section);
+        g_hdm4_search['code'] = $(this).html();
+        //$('input:radio[name=hdm4year][value='+y+']').prop('checked',true);
+        model.getHDM4Result(g_hdm4_search['expressway'],g_hdm4_search['type'],g_hdm4_search['year'],g_hdm4_search['exptype'],g_hdm4_search['section']);
+        return false;
+    });
+
+
+
+});
+
+
+//Global Function
+
+//Show data
+function showdata(selector){
+        $('#maptoolbox #geo').hide();
+        if ($('#main_content').is(':hidden')) {
+            $('#main_content').show();
+        }
+        $('#main_content').children('div').hide();
+        if (selector.is(':hidden')) 
+            selector.show();    
+    }
+
+//Update datatable
+function updateDataTable() {
+        var allrow = $('#table1 tbody tr');
+        allrow.slice(0, startIndex).hide();
+        allrow.slice(startIndex, endIndex + 1).show();
+        allrow.slice(endIndex + 1).hide();
+    }
+
+//Update range of jquery slider
+function updateRange(ui, rangeInfo) {
+    if (ui.values[1] - ui.values[0] >= 2) {
+        $('#slider-range').slider("enable");
+        setStartEndIndex(ui.values[0], ui.values[1]);
+        rangeInfo.html(toKm(g_data['kmstart']) + " - " + toKm(g_data['kmend']));
+        $('#search-input .rangekm').html(toKm(g_data['kmstart']) + ' - ' + toKm(g_data['kmend']));
+    }
+
+}
+
+function updateChartAxis(serie_id) {
+        g_options.xaxis.min = g_data['kmstart'];
+        g_options.xaxis.max = g_data['kmend'];
+        view.drawGraph();
+    }
+
+//Update Flag
+function updateFlag(ui) //Trigger when slider is slided
+    {
+        findex = ui.values[0] * g_all_result['offset'];
+        lindex = ui.values[1] * g_all_result['offset'] + g_search_info_level2['kmfreq'] / 5;
+        if (lindex > g_all_result['usedlength']) lindex = g_all_result['usedlength'];
+        g_current_var['flagfirstlat'] = g_all_result[findex]['lat'];
+        g_current_var['flagfirstlong'] = g_all_result[findex]['long'];
+        g_current_var['flaglastlat'] = g_all_result[lindex]['lat'];
+        g_current_var['flaglastlong'] = g_all_result[lindex]['long'];
+    }
+
+function cloneToMap(source, target, nl, multiple) {
+    var index = source.find('option:selected').prop('selected', 'selected').index();
+    source.clone().removeClass('input-spanall').addClass('span3').appendTo(target).find('option').eq(index).prop('selected', 'selected');
+    if (nl) $(target).append('<br>');
+    if (!multiple) $(target).find('select').prop('multiple', '');
+}
+
+function setStartEndIndex(start_i, end_i) {
+        startIndex = start_i;
+        endIndex = end_i;
+        g_data['kmstart'] = g_linedata[startIndex][0];
+        g_data['kmend'] = g_linedata[endIndex][0];
+    }
+
+function highlightTable(index) {
+        $('#table1 tbody tr.table_highlight').removeClass("table_highlight");
+        $('#table1 tbody tr').eq(index).addClass('table_highlight');
+
+        if ($('#current_linedata').is(':hidden')) 
+            $('#current_linedata').show();
+        var ydata = getAbbInfoType(g_search_info['infotype']) + ": " + $('#table1 tbody tr.table_highlight td:last').html() + " ";
+        var selectedkm = $('#table1 tbody tr.table_highlight td:first').html();
+        $('#current_linedata span.selectedkm').html(selectedkm);
+        $('#current_linedata span.ydata').html(ydata);
+
+        updateVideo(index);
+    }
+
+function scrollTable() {
+    //Update Scroll Bar of Data Table No.1
+    var tablehl = $('.table_highlight');
+    var tableWrapper = $('#table1').parent();
+    tableWrapper.scrollTop(tableWrapper.scrollTop() + tablehl.position().top - tablehl.height() * 4 - tableWrapper.position().top);
+}
+
+//Datatable(Table1) Click
+$('#table1 tbody tr').live('click', function () {
+    var index = $(this).parent().children().index($(this));
+    highlightTable(index);
+    updateVertical(index);
+    updateCurrentVar(index);
+  //  reelUpdate(index);
+});
+
+//Update image data when clicked
+function updateVideo(index) {
+    selectMapPoint(index);
+    var latitute = g_all_result[index * g_all_result['offset']]['lat'];
+    var longtitute = g_all_result[index * g_all_result['offset']]['long'];
+    var selectedkm = $('#table1 tbody tr.table_highlight td:first').html();
+    var ctrlSection = g_all_result[index * g_all_result['offset']]['section'];
+    var image_index = index * g_all_result['offset'];
+   
+    $('.latitute').html(latitute);
+    $('.longtitute').html(longtitute);
+    $('#video-detail .selectedkm').html(selectedkm);
+    $('.control-section').html(ctrlSection);
+
+    if ($('#video-player #reel_container').is(":hidden")) {
+        //var index_image = index * g_search_info_level2.kmfreq / 25 * (g_search_info_level2['kmfreq']/25);
+        var index_image = (index * (g_search_info_level2.kmfreq / 25 )* 5);
+
+        $('#video-player #thumbnail').empty();
+        $('#video-player #thumbnail').html('<img src="" />');
+        $('#video-player #thumbnail img').attr("src", "images/imgloading.gif").attr("width", "370").attr("height", "240");
+
+        var directory = getImageDirectory(g_search_info_level2.currentsection);
+
+        var wait = setInterval(function () {
+            if (finish_getimage) {
+                clearInterval(wait);
+                var imgpath = "asset_images/" + directory + "/" + (parseInt(g_video['first_image'])+index_image) + ".jpg";
+                console.log(imgpath);
+                $('#video-player #thumbnail img').attr("src", imgpath);
+            }
+        }, 200);
+
+        $("#video-player #thumbnail img").error(function () {
+            $(this).attr("src", "images/imgerror.gif");
+            var imgpath = "asset_images/" + directory + "/" + (parseInt(g_video['first_image'])+index_image) + ".jpg";
+            //alert('Image not found:\n'+'Location: '+imgpath);
+            errorReport('Image not found:\n' + 'Location: ' + imgpath);
+        });
+    }
+
+}
+
+function updateVertical(index) {
+    selectedIndex = index;
+    //console.log(selectedIndex);
+    var y = plot.getData()[1].datapoints.points;
+    y[0] = y[2] = g_linedata[index][0];
+    plot.draw();
+}
+
+ function updateCurrentVar(index) {
+        index = index * g_all_result['offset'];
+        eindex = index + g_search_info_level2['kmfreq'] / 5;
+        if (eindex > g_all_result['usedlength']) eindex = g_all_result['usedlength'];
+        //Add Update For section
+        g_current_var['section'] = g_all_result[index]['section'];
+        g_current_var['index'] = index;
+        g_current_var['kmstart'] = parseFloat(g_all_result[index]['subdistance']);
+        g_current_var['kmend'] = parseFloat(g_all_result[eindex]['subdistance']);
+        g_current_var['lat'] = parseFloat(g_all_result[index]['lat']);
+        g_current_var['longi'] = parseFloat(g_all_result[index]['long']);
+        g_current_var['mpd'] = parseFloat(g_all_result[index]['mpd']).toFixed(4);
+        g_current_var['iri_avg'] = parseFloat(g_all_result[index]['iri_avg']).toFixed(4);
+        g_current_var['rut_lane'] = parseFloat(g_all_result[index]['rut_lane']).toFixed(4);
+    }
+
+
+function setUpCurrentVar() {
+        g_current_var['section'] = g_search_info_level2['currentsection'];
+        g_current_var['rangekmstart'] = g_all_result['mindis'];
+        g_current_var['rangekmend'] = g_all_result['maxdis'];
+        //For Flag Positioning
+        var lastindex = g_all_result['usedlength'];
+        g_current_var['flagfirstlat'] = g_all_result[0]['lat'];
+        g_current_var['flagfirstlong'] = g_all_result[0]['long'];
+        g_current_var['flaglastlat'] = g_all_result[lastindex]['lat'];
+        g_current_var['flaglastlong'] = g_all_result[lastindex]['long'];
+
+    }
+
+//Check nearest point when user click on graph
+function nearestIndex(xpos) {
+    var begin = 0;
+    var fin = g_linedata.length - 1;
+    var middle;
+    while (begin < fin) {
+        middle = Math.floor((begin + fin) / 2);
+        if (g_linedata[middle][0] < xpos) begin = middle + 1;
+        else fin = middle;
+    }
+    var nearest = 0;
+    if (fin != 0) nearest = xpos - g_linedata[fin - 1][0] < g_linedata[fin][0] - xpos ? fin - 1 : fin;
+    return nearest;
+}
+
+function videoPreloader() {
+    $("#videopreloader div.bar").css('width', '');
+    $("#videopreloader .percentage").html('');
+    var imageloaded = 0;
+    imageloaded = 0;
+    var preload;
+    clearInterval(preload);
+    if ($("#videopreloader").is(":hidden")) $("#videopreloader").show();
+
+    preload = setInterval(function () {
+        if ($('#videoplayer').data("loadStatus") == "loading") {
+            if ($('div.jsMovieFrame').eq(imageloaded).css('background-image') != "none") {
+                imageloaded++;
+                var allimage = g_video['length'];
+                var width = (imageloaded * $("#videopreloader").width()) / allimage;
+                var percentage = (imageloaded / allimage * 100).toFixed(0) + "%";
+                $("#videopreloader div.bar").css('width', width + 'px');
+                $("#videopreloader .percentage").html(percentage);
+
+            }
+        } else {
+            $('#videoplayer').data("loadStatus", 'loaded');
+            clearInterval(preload);
+            $("#videopreloader .percentage").html('100%');
+            $("#videopreloader div.bar").css('width', $("#videopreloader").width() + 'px');
+            setTimeout(function () {
+                $("#videopreloader").fadeOut();
+
+            }, 200);
+        }
+    }, 10);
+}
+
+function showLoading() {
+$('#loading').show();
+//$('#loading').css('top',$('body').scrollTop()-100);
+
+}
+
+function hideLoading() {
+    $('#loading').hide();
+}
+
+function errorReport(errmsg) {
+    var noreport = $('div.errorreport').length;
+    //  console.log(errmsg);
+    //errmsg = errmsg.replace("\n","\r\n");
+    var htmlcode = '<div class="errorreport alert alert-error alert-block"><button type="button" class="close" data-dismiss="alert">×</button><strong>' + 'Error! ' + '</strong>' + errmsg + '</div>';
+    $('.container').prepend(htmlcode);
+    //$('div.errorreport').css('top',$('body').scrollTop()-100);
+    $('div.errorreport:first').css('z-index', 3000 + noreport);
+    $(".alert-error").click(function(){
+        $(this).remove();
+    });
+}
+
+//Get Directory of Image (0101 is in the same direc with 0200 ..~~)
+function getImageDirectory(section){
+    var exp = section.substr(0,2);
+    var suffix = section.substr(6);
+    var sstr = section.substr(2,4);
+    if(sstr == "0200"){
+        return exp+"0101"+suffix;
+	} 
+	/*
+	if(sstr == "0401") {
+        if(exp == "07")
+            return exp+"0402"+suffix;
+        else
+            return section;
+	}
+	*/
+	
+	if(sstr == "0402") {
+        if(exp == "07")
+            return exp+"0401"+suffix;
+        else
+            return section;
+	}
+	
+	if(sstr == "0402") {
+        if(exp == "09")
+            return exp+"0401"+suffix;
+        else
+            return section;
+	}
+
+    if(sstr == "0301") {
+        if(exp == "07")
+            return exp+"0302"+suffix;
+        else
+            return section;
+    } else {
+	    return section;
+	}
+}
+//======================= KmFreq Function ===================================
+    function disableFreq() {
+        $('#kmfreq').html(g_search_info_level2.kmfreq);
+        var index = _kmfreq.indexOf(parseFloat($('#kmfreq').html()));
+        if (index <= _kmfreq.indexOf(_rangefix)) {
+            $('#kmfreq').prev().addClass('disabled');
+            $('#kmfreq').html(_rangefix);
+            g_search_info_level2.kmfreq = _rangefix;
+        } else $('#kmfreq').prev().removeClass('disabled');
+        if (index == _kmfreq.length - 1) $('#kmfreq').next().addClass('disabled');
+        else $('#kmfreq').next().removeClass('disabled');
+    }
+
+    
+
+function getInfoType(infotype) {
+    var column_info_name;
+    if (infotype == 'roughness') column_info_name = 'iri_avg';
+    else if (infotype == 'rutting') column_info_name = 'rut_lane';
+    else if (infotype == 'texture') column_info_name = 'mpd';
+    return column_info_name;
+}
+
+function toKm(val) {
+    return new String(new Number(val).toFixed(3)).replace('.', '+');
+}
+
+function expcodeToExpressway(expcode) {
+    var expstr;
+    switch (expcode) {
+        case "07":
+            expstr = "ทางหลวงพิเศษหมายเลข 7";
+            break;
+        case "09":
+            expstr = "ทางหลวงพิเศษหมายเลข 9";
+            break;
+    }
+    return expstr;
+}
+
+function toFullName(code) {
+    var fullname = "";
+    switch(g_search_info['exptype']) {
+        case "1":
+            var eachcode = code.split("_");
+            var fullname = "ทางหลัก ";
+            if (eachcode[1] == "O") fullname += "ฝั่งขาออก";
+            else fullname += "ฝั่งขาเข้า";
+            switch (eachcode[2]) {
+                case "RL":
+                    fullname += "ช่องจราจรขวา";
+                    break;
+                case "ML":
+                    fullname += "ช่องจราจรกลาง";
+                    break;
+                case "LL":
+                    fullname += "ช่องจราจรซ้าย";
+                    break;
+            }
+        break;
+        case "2":
+            var enex_name = $(".enexname option:selected").html();
+            fullname = enex_name;
+        break;
+        case "3": 
+            var eachcode = code.split("_");
+            var fullname = "ทางเชื่อม ";
+            if (eachcode[1] == "O") 
+                fullname += "ฝั่งขาออก";
+            else 
+                fullname += "ฝั่งขาเข้า";
+        break;      
+        default: 
+            fullname = code;
+        break;
+    }
+    return fullname;
+}
+
+function toExpressName(section) {
+    var str1 = section.substr(0, 2);
+    var str = section.substr(0, 2);
+    if (str1 == "07") return "ทางหลวงพิเศษหมายเลข 7";
+    else return "ทางหลวงพิเศษหมายเลข 9"
+
+}
+
+function getAbbInfoType(infotype) {
+    var column_info_name;
+    if (infotype == 'roughness') column_info_name = 'IRI';
+    else if (infotype == 'rutting') column_info_name = 'Rutting';
+    else if (infotype == 'texture') column_info_name = 'MPD';
+    return column_info_name;
+}
+
+function toDir(lane){
+    if(lane.indexOf('F') != -1)
+        return 'ขาออก';
+    else
+        return 'ขาเข้า';
+}
+
+function selectToList(source,target){
+    var htmlcode = "";
+    target.html('');
+    source.find('option').each(function(){
+        var value = $(this).prop('value');
+        var html  = $(this).html();
+        htmlcode += "<li>";
+        htmlcode += "<a href='' id='"+value+"'>"+html+"</a>";
+        htmlcode += "</li>";
+    });
+    target.append(htmlcode);
+    return htmlcode;
+}
+
+function returnName(section){
+
+}
